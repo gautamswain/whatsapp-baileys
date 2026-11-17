@@ -114,6 +114,38 @@ app.get('/groups', async (req, res) => {
   res.json(list);
 });
 
+// ... aapana nka puruna app.post("/send-msg", ...) code eithi sesh heithiba ...
+});
+
+// 👇 THIK EITHI PASTE KARANTU (app.listen(...) ru upare) 👇
+app.post("/send-image", async (req, res) => {
+  const apiKey = req.headers["x-api-key"];
+  if (apiKey !== process.env.API_KEY && apiKey !== "adhikar_secret_123") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { phone, imageUrl, caption } = req.body;
+  if (!phone || !imageUrl) {
+    return res.status(400).json({ error: "phone and imageUrl are required" });
+  }
+
+  try {
+    const jid = phone.includes("@") ? phone : `${phone.replace(/\D/g, "")}@s.whatsapp.net`;
+
+    await sock.sendMessage(jid, {
+      image: { url: imageUrl },
+      caption: caption || ""
+    });
+
+    res.status(200).json({ status: "Image sent successfully", to: jid });
+  } catch (err) {
+    console.error("Send Image Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ... app.listen(PORT, ...) eithi thiba ...
+
 app.post('/send-msg', async (req, res) => {
   if (req.headers['x-api-key'] !== API_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   if (!isConnected) return res.status(503).json({ error: 'Not connected yet' });
