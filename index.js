@@ -1,7 +1,6 @@
 const { default: makeWASocket, initAuthCreds, BufferJSON, proto } = require('@whiskeysockets/baileys');
 const { createClient } = require('@libsql/client');
 const express = require('express');
-const qrcode = require('qrcode-terminal');
 
 const app = express();
 app.use(express.json());
@@ -60,6 +59,7 @@ async function useTursoAuthState() {
 
 let sock;
 let isConnected = false;
+let latestQR = null;
 
 async function startWhatsApp() {
   const { state, saveCreds } = await useTursoAuthState();
@@ -68,11 +68,12 @@ async function startWhatsApp() {
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', ({ connection, qr }) => {
     if (qr) {
-      console.log('\nScan this QR Code in WhatsApp -> Linked Devices:');
-      qrcode.generate(qr, { small: true });
+      latestQR = qr;
+      console.log('New QR generated. Open /qr in browser to scan.');
     }
     if (connection === 'open') {
       isConnected = true;
+      latestQR = null;
       console.log('WhatsApp Connected via Turso!');
     }
     if (connection === 'close') {
@@ -85,6 +86,25 @@ async function startWhatsApp() {
 startWhatsApp();
 
 app.get('/', (req, res) => res.json({ status: isConnected ? 'connected' : 'connecting' }));
+
+// Browser re clean square QR code dekhiba pain endpoint
+app.get('/qr', (req, res) => {
+  if (isConnected) {
+    return res.send('<h2>WhatsApp is already connected! Session saved in Turso DB.</h2>');
+  }
+  if (!latestQR) {
+    return res.send('<h3>Generating QR... Refresh this page in 3 seconds.</h3><script>setTimeout(()=>location.reload(),3000)</script>');
+  }
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQR)}`;
+  res.send(`
+    <div style="text-align:center;font-family:sans-serif;margin-top:40px;">
+      <h2>Scan with WhatsApp &rarr; Linked Devices</h2>
+      <img src="${qrImgUrl}" alt="QR Code" style="border:10px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.2);" />
+      <p>Auto-refreshing every 15 seconds...</p>
+      <script>setTimeout(()=>location.reload(),15000)</script>
+    </div>
+  `);
+});
 
 app.get('/groups', async (req, res) => {
   if (req.headers['x-api-key'] !== API_SECRET) return res.status(401).json({ error: 'Unauthorized' });
